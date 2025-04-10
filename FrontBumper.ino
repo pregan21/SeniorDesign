@@ -142,11 +142,7 @@ void loop() {
               detectionMode = true;
             }
 
-            if(detectionMode)
-            {
-              if(received.length() > 0)
-                handleDetectedObject(received);
-            }
+            handleDetectedObject(received);
             receivedFlag = true;
             break;
         }
@@ -172,13 +168,22 @@ void HandleLidar()
       // Error
       Serial.print("Couldn't get distance!: ");
       Serial.println(sensor.vl_status);
+      LidarDistance = 2000;
       return;
     }
 
-    lidarDistance = reading;
+    LidarDistance = reading;
     Serial.print("Reading: ");
     Serial.print(reading);
     Serial.println(" mm");
+
+
+    if(LidarDistance < 500)
+    {
+      Serial.println("Too close hazard");
+      dataSend.dist = 0.5;
+      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &dataSend, sizeof (dataSend));
+    }
 
   }
 }
@@ -221,10 +226,10 @@ void handleDetectedObject(String receivedDetection) {
     Serial.println("Label: " + label);
     Serial.println("Distance: " + distance);
     Serial.println("Centering: " + centering);
-    
-    double distanceDouble = atof(distance.c_str());
+    double distanceDouble = 0.0;
+    distanceDouble = atof(distance.c_str());
 
-  if(centering == "left" || centering == "right")
+    if(centering == "left" || centering == "right")
     {
       // lane departure detected
       Serial.println("Lane Departure!");
@@ -237,6 +242,10 @@ void handleDetectedObject(String receivedDetection) {
       dataSend.dist = 0.5;
       esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &dataSend, sizeof (dataSend));
     }
+    else
+    {
+      dataSend.dist = 2000;
+    }
 
     if(label == "person" && distanceDouble < 500 && speedMPS > 0)
     {
@@ -244,15 +253,14 @@ void handleDetectedObject(String receivedDetection) {
       dataSend.dist = 0.5;
       esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &dataSend, sizeof (dataSend));
     }
-
-    if(lidarDistance < 250)
+    else 
     {
-      Serial.println("Too close hazard");
-      dataSend.dist = 0.5;
-      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &dataSend, sizeof (dataSend));
+      dataSend.dist = 2000;
     }
 
-String lastScentence = "";
+
+
+}
 
 void HandleGPS()
 {
@@ -274,7 +282,7 @@ void HandleGPS()
   // Skip if it's blank or malformed
   if (nmeaData.length() == 0 || !nmeaData.startsWith("$"))
   {
-    Serial.println("⚠️ Skipped garbage or empty data");
+    //Serial.println("⚠️ Skipped garbage or empty data");
     return;
   }
 
@@ -316,18 +324,22 @@ bool isTailingTooClose(double tailingDistance, double currentSpeed)
   // tailingDistance is in mm
   double safeDistance = currentSpeed * 2.0; // 2-second rule
 
-  if(currentSpeed < 0)
+  Serial.printf("speed: %lf\n", currentSpeed);
+
+  if(tailingDistance < 1)
   {
-    if (tailingDistance < 250)
-    {
-      return true;
-    }
+    return false;
+  }
+    
+
+  if(currentSpeed < 1)
+  {
+    Serial.printf("tailing distance: %lf\n", tailingDistance );
+    return (tailingDistance < 500);
+   
   }
   else
   {
     return (tailingDistance / 1000) < safeDistance;
   }
 }
-
-
-
